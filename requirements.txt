@@ -1,22 +1,11 @@
-<<<<<<< HEAD
-streamlit>=1.28.0
-pandas>=1.5.0
-plotly>=5.15.0
+#python-dateutil>=2.8.2  # 代码中用了relativedelta，需显式声明
+streamlit>=1.28.0,<2.0.0
+pandas>=2.0.0,<3.0.0
+plotly>=5.15.0,<6.0.0
 openpyxl>=3.1.0
-numpy>=1.24.0
+numpy>=1.24.0,<2.0.0
 jieba>=0.42.1
-scikit-learn>=1.2.0
-wordcloud>=1.9.2
-matplotlib>=3.7.0
-=======
-streamlit>=1.28.0
-pandas>=1.5.0
-plotly>=5.15.0
-openpyxl>=3.1.0
-numpy>=1.24.0
-jieba>=0.42.1
-scikit-learn>=1.2.0
-wordcloud>=1.9.2
-matplotlib>=3.7.0
->>>>>>> 6013d9562b4a3b1f0ed7952deffda8de1afcc6f3
-python-dateutil>=2.8.2  # 代码中用了relativedelta，需显式声明
+scikit-learn>=1.2.0,<2.0.0
+wordcloud>=1.9.3
+matplotlib>=3.7.0,<4.0.0
+python-dotenv>=1.0.0
