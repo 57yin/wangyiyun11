@@ -1,3 +1,4 @@
+import base64
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -12,8 +13,118 @@ from pathlib import Path
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import re
+import sys
+import subprocess
 
-# 依赖安装相关函数（保持不变）
+# ---------------------- 背景图片处理 ----------------------
+def get_base64_image(image_path):
+    """将本地图片文件转换为Base64编码字符串"""
+    try:
+        with open(image_path, "rb") as image_file:
+            # 读取图片并编码为Base64
+            base64_bytes = base64.b64encode(image_file.read())
+            base64_str = base64_bytes.decode("utf-8")
+            return base64_str
+    except FileNotFoundError:
+        st.error(f"错误：背景图片未找到，请检查路径是否正确：{image_path}")
+        return None
+    except Exception as e:
+        st.error(f"读取图片时出错：{str(e)}")
+        return None
+
+# 本地图片路径（请确保这个路径正确）
+IMAGE_PATH = r"D:\vscode\analysis_app\cpm.jpg"  # 使用r前缀避免转义问题
+base64_image = get_base64_image(IMAGE_PATH)
+
+# ---------------------- 自定义样式（背景图片版） ----------------------
+if base64_image:
+    custom_style = f"""
+    <style>
+        /* 全局重置与基础样式 */
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }}
+        
+        /* 关键修改：使用Base64编码的本地图片作为背景 */
+        body, .stApp {{
+            background-image: url("data:image/jpeg;base64,{base64_image}");
+            background-size: cover;       /* 让图片覆盖整个容器 */
+            background-position: center;  /* 将图片居中 */
+            background-repeat: no-repeat; /* 不重复平铺图片 */
+            background-attachment: fixed; /* 固定背景，不随滚动条滚动 */
+            min-height: 100vh;
+        }}
+        
+        /* 隐藏默认菜单和页脚 */
+        #MainMenu {{visibility: hidden !important;}}
+        footer {{visibility: hidden !important;}}
+        header {{visibility: hidden !important;}}
+        
+        /* 内容容器必须透明，才能看到背景图 */
+        .block-container {{
+            background: transparent !important;
+            padding: 20px !important;
+        }}
+
+        #/* 为内容组件添加半透明背景，提升文字可读性 */
+        #.stMarkdown, .stDataFrame, .stSelectbox, .stSlider, .stButton, .stExpander, .stTabs {{
+            #background-color: rgba(255, 255, 255, 0.85) !important; /* 白色半透明背景 */
+            #padding: 10px;
+            #border-radius: 8px;
+            #box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        #}}
+        
+        /* 推荐卡片样式 */
+        .recommendation-card {{
+            background-color: #ffffff;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-left: 5px solid #1DB954;
+        }}
+        
+        .recommendation-card h4 {{
+            color: #1DB954;
+            margin-bottom: 10px;
+        }}
+        
+        .recommendation-card p {{
+            margin: 5px 0;
+            color: #333333;
+        }}
+        
+        .recommendation-card .match-score {{
+            background-color: #1DB954;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            display: inline-block;
+            margin-top: 10px;
+        }}
+    </style>
+    """
+else:
+    # 如果图片加载失败，使用备用的浅灰色背景
+    custom_style = """
+    <style>
+        body, .stApp {
+            background: linear-gradient(135deg, #f0f0f0 0%, #d9d9d9 100%) !important;
+            min-height: 100vh;
+        }
+        /* 其他样式保持不变 */
+        #MainMenu {visibility: hidden !important;}
+        footer {visibility: hidden !important;}
+        header {visibility: hidden !important;}
+        .block-container {background: transparent !important; padding: 20px !important;}
+    </style>
+    """
+
+# ---------------------- 依赖安装相关函数 ----------------------
 def install_deps():
     required_packages = ['streamlit>=1.28.0', 'pandas', 'plotly', 'openpyxl', 'numpy', 'jieba', 'scikit-learn']
     try:
@@ -26,7 +137,7 @@ def install_deps():
         print(f"自动安装依赖失败: {e}")
         print("请手动安装以下库: " + ", ".join(required_packages))
 
-# 首次运行依赖检查（保持不变）
+# ---------------------- 首次运行依赖检查 ----------------------
 try:
     from importlib.metadata import version
     st_version = version('streamlit')
@@ -34,7 +145,6 @@ try:
     if tuple(map(int, st_version.split('.'))) < (1, 28, 0):
         print("Streamlit 版本过低，需要升级...")
         raise ImportError("Streamlit version too old")
-    # 检查scikit-learn是否安装
     import sklearn
 except (ImportError, Exception):
     print("检测到缺失依赖或版本不兼容，正在尝试自动安装...")
@@ -60,65 +170,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"  
 )
 
-# 自定义样式（保持不变，注意后续若仍有布局冲突可简化调试）
-custom_style = """
-    <style>
-        /* 全局重置与基础样式 */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        
-        /* 页面背景渐变 */
-        .main {
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-        
-        /* 隐藏默认菜单和页脚 */
-        #MainMenu {visibility: hidden !important;}
-        footer {visibility: hidden !important;}
-        header {visibility: hidden !important;}
-        
-        /* 推荐卡片样式 */
-        .recommendation-card {
-            background-color: #ffffff;
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 15px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            border-left: 5px solid #1DB954;
-        }
-        
-        .recommendation-card h4 {
-            color: #1DB954;
-            margin-bottom: 10px;
-        }
-        
-        .recommendation-card p {
-            margin: 5px 0;
-            color: #333333;
-        }
-        
-        .recommendation-card .match-score {
-            background-color: #1DB954;
-            color: white;
-            padding: 3px 8px;
-            border-radius: 12px;
-            font-size: 12px;
-            display: inline-block;
-            margin-top: 10px;
-        }
-        
-        /* 其他样式保持不变... */
-    </style>
-"""
+# 应用自定义样式
 st.markdown(custom_style, unsafe_allow_html=True)
 
-# 颜色配置（保持不变）
+# 颜色配置
 COLOR_PALETTE = {
     'primary': '#1DB954',      
     'primary_light': '#1ed760',
@@ -135,11 +190,11 @@ COLOR_PALETTE = {
     'info': '#17a2b8'          
 }
 
-# 情感分析阈值（保持不变）
+# 情感分析阈值
 NEGATIVE_THRESHOLD = 0.4  
 POSITIVE_THRESHOLD = 0.6  
 
-# 数据源配置（保持不变）
+# 数据源配置
 TYPE_LIST_STYLE = ['流行', '热血', '00后', '华语', '伤感', '夜晚', '治愈', '放松', '感动', '安静', '民谣', '孤独', '浪漫']
 TYPE_LIST_RANK = ['热歌榜', '新歌榜', '飙升榜', '原创榜']
 DATA_DIR = Path(__file__).parent  
