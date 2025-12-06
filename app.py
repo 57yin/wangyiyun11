@@ -1,4 +1,3 @@
-import base64
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -13,120 +12,29 @@ from pathlib import Path
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import re
-import sys
 import subprocess
+import sys
+from dateutil.relativedelta import relativedelta
 
-# ---------------------- 背景图片处理 ----------------------
-def get_base64_image(image_path):
-    """将本地图片文件转换为Base64编码字符串"""
-    try:
-        with open(image_path, "rb") as image_file:
-            # 读取图片并编码为Base64
-            base64_bytes = base64.b64encode(image_file.read())
-            base64_str = base64_bytes.decode("utf-8")
-            return base64_str
-    except FileNotFoundError:
-        st.error(f"错误：背景图片未找到，请检查路径是否正确：{image_path}")
-        return None
-    except Exception as e:
-        st.error(f"读取图片时出错：{str(e)}")
-        return None
+# 新增机器学习相关库
+from sklearn.cluster import KMeans
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.metrics import (
+    accuracy_score, classification_report, confusion_matrix,
+    mean_squared_error, r2_score, silhouette_score
+)
+from sklearn.decomposition import PCA
+import warnings
+warnings.filterwarnings('ignore')
 
-# 本地图片路径（请确保这个路径正确）
-IMAGE_PATH = r"D:\vscode\analysis_app\cpm.jpg"  # 使用r前缀避免转义问题
-base64_image = get_base64_image(IMAGE_PATH)
-
-# ---------------------- 自定义样式（背景图片版） ----------------------
-if base64_image:
-    custom_style = f"""
-    <style>
-        /* 全局重置与基础样式 */
-        * {{
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }}
-        
-        /* 关键修改：使用Base64编码的本地图片作为背景 */
-        body, .stApp {{
-            background-image: url("data:image/jpeg;base64,{base64_image}");
-            background-size: cover;       /* 让图片覆盖整个容器 */
-            background-position: center;  /* 将图片居中 */
-            background-repeat: no-repeat; /* 不重复平铺图片 */
-            background-attachment: fixed; /* 固定背景，不随滚动条滚动 */
-            min-height: 100vh;
-        }}
-        
-        /* 隐藏默认菜单和页脚 */
-        #MainMenu {{visibility: hidden !important;}}
-        footer {{visibility: hidden !important;}}
-        header {{visibility: hidden !important;}}
-        
-        /* 内容容器必须透明，才能看到背景图 */
-        .block-container {{
-            background: transparent !important;
-            padding: 20px !important;
-        }}
-
-        #/* 为内容组件添加半透明背景，提升文字可读性 */
-        #.stMarkdown, .stDataFrame, .stSelectbox, .stSlider, .stButton, .stExpander, .stTabs {{
-            #background-color: rgba(255, 255, 255, 0.85) !important; /* 白色半透明背景 */
-            #padding: 10px;
-            #border-radius: 8px;
-            #box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        #}}
-        
-        /* 推荐卡片样式 */
-        .recommendation-card {{
-            background-color: #ffffff;
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 15px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            border-left: 5px solid #1DB954;
-        }}
-        
-        .recommendation-card h4 {{
-            color: #1DB954;
-            margin-bottom: 10px;
-        }}
-        
-        .recommendation-card p {{
-            margin: 5px 0;
-            color: #333333;
-        }}
-        
-        .recommendation-card .match-score {{
-            background-color: #1DB954;
-            color: white;
-            padding: 3px 8px;
-            border-radius: 12px;
-            font-size: 12px;
-            display: inline-block;
-            margin-top: 10px;
-        }}
-    </style>
-    """
-else:
-    # 如果图片加载失败，使用备用的浅灰色背景
-    custom_style = """
-    <style>
-        body, .stApp {
-            background: linear-gradient(135deg, #f0f0f0 0%, #d9d9d9 100%) !important;
-            min-height: 100vh;
-        }
-        /* 其他样式保持不变 */
-        #MainMenu {visibility: hidden !important;}
-        footer {visibility: hidden !important;}
-        header {visibility: hidden !important;}
-        .block-container {background: transparent !important; padding: 20px !important;}
-    </style>
-    """
-
-# ---------------------- 依赖安装相关函数 ----------------------
+# 依赖安装相关函数（保持不变）
 def install_deps():
-    required_packages = ['streamlit>=1.28.0', 'pandas', 'plotly', 'openpyxl', 'numpy', 'jieba', 'scikit-learn']
+    required_packages = [
+        'streamlit>=1.28.0', 'pandas', 'plotly', 'openpyxl', 'numpy', 
+        'jieba', 'scikit-learn', 'wordcloud', 'matplotlib', 'seaborn'
+    ]
     try:
         import pkg_resources
         installed = {p.key for p in pkg_resources.working_set}
@@ -137,7 +45,7 @@ def install_deps():
         print(f"自动安装依赖失败: {e}")
         print("请手动安装以下库: " + ", ".join(required_packages))
 
-# ---------------------- 首次运行依赖检查 ----------------------
+# 首次运行依赖检查（保持不变）
 try:
     from importlib.metadata import version
     st_version = version('streamlit')
@@ -145,6 +53,7 @@ try:
     if tuple(map(int, st_version.split('.'))) < (1, 28, 0):
         print("Streamlit 版本过低，需要升级...")
         raise ImportError("Streamlit version too old")
+    # 检查scikit-learn是否安装
     import sklearn
 except (ImportError, Exception):
     print("检测到缺失依赖或版本不兼容，正在尝试自动安装...")
@@ -170,10 +79,136 @@ st.set_page_config(
     initial_sidebar_state="expanded"  
 )
 
-# 应用自定义样式
+# 自定义样式（优化数据概览样式）
+custom_style = """
+    <style>
+        /* 全局重置与基础样式 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        /* 页面背景渐变 */
+        .main {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        /* 隐藏默认菜单和页脚 */
+        #MainMenu {visibility: hidden !important;}
+        footer {visibility: hidden !important;}
+        header {visibility: hidden !important;}
+        
+        /* 数据概览容器样式 */
+        .overview-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        /* 指标卡片样式 */
+        .metric-card {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            border-left: 4px solid #1DB954;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .metric-card h4 {
+            color: #6c757d;
+            font-size: 14px;
+            margin: 0 0 8px 0;
+        }
+        
+        .metric-card p {
+            color: #1DB954;
+            font-size: 24px;
+            font-weight: bold;
+            margin: 0;
+        }
+        
+        /* 推荐卡片样式 */
+        .recommendation-card {
+            background-color: #ffffff;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-left: 5px solid #1DB954;
+        }
+        
+        .recommendation-card h4 {
+            color: #1DB954;
+            margin-bottom: 10px;
+        }
+        
+        .recommendation-card p {
+            margin: 5px 0;
+            color: #333333;
+        }
+        
+        .recommendation-card .match-score {
+            background-color: #1DB954;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            display: inline-block;
+            margin-top: 10px;
+        }
+        
+        /* 页面标题样式 */
+        .page-title {
+            font-size: 28px;
+            font-weight: bold;
+            color: #1DB954;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .sub-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #2d3436;
+            margin: 20px 0 10px 0;
+        }
+        
+        /* 模型评估卡片 */
+        .model-metric {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin: 10px;
+            text-align: center;
+        }
+        
+        .model-metric h4 {
+            color: #1DB954;
+            margin-bottom: 5px;
+        }
+        
+        .model-metric p {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2d3436;
+        }
+    </style>
+"""
 st.markdown(custom_style, unsafe_allow_html=True)
 
-# 颜色配置
+# 颜色配置（保持不变）
 COLOR_PALETTE = {
     'primary': '#1DB954',      
     'primary_light': '#1ed760',
@@ -190,11 +225,11 @@ COLOR_PALETTE = {
     'info': '#17a2b8'          
 }
 
-# 情感分析阈值
+# 情感分析阈值（保持不变）
 NEGATIVE_THRESHOLD = 0.4  
 POSITIVE_THRESHOLD = 0.6  
 
-# 数据源配置
+# 数据源配置（保持不变）
 TYPE_LIST_STYLE = ['流行', '热血', '00后', '华语', '伤感', '夜晚', '治愈', '放松', '感动', '安静', '民谣', '孤独', '浪漫']
 TYPE_LIST_RANK = ['热歌榜', '新歌榜', '飙升榜', '原创榜']
 DATA_DIR = Path(__file__).parent  
@@ -322,113 +357,726 @@ def load_all_data(selected_data_source):
         }
     return df, load_summary
 
-# ---------------------- 数据概览卡片（保持不变） ----------------------
+# ---------------------- 优化后的数据概览卡片 ----------------------
 def display_data_overview(df, data_source):
     st.markdown('<div class="sub-title">📈 数据概览</div>', unsafe_allow_html=True)
+    
+    # 根据屏幕宽度自动调整列数
+    cols_per_row = 3  # 默认每行3列
     if data_source == "13类风格歌单数据":
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.markdown("""
-            <div class="metric-card">
-                <h4 style="color: #1DB954;">总歌单数量</h4>
-                <p style="font-size: 24px; font-weight: bold;">{:,}</p>
-            </div>
-            """.format(len(df)), unsafe_allow_html=True)
-        with col2:
-            st.markdown("""
-            <div class="metric-card">
-                <h4 style="color: #FF6B6B;">总播放次数</h4>
-                <p style="font-size: 24px; font-weight: bold;">{:,}</p>
-            </div>
-            """.format(df['播放次数'].sum()), unsafe_allow_html=True)
-        with col3:
-            st.markdown("""
-            <div class="metric-card">
-                <h4 style="color: #4ECDC4;">总收藏量</h4>
-                <p style="font-size: 24px; font-weight: bold;">{:,}</p>
-            </div>
-            """.format(df['收藏量'].sum()), unsafe_allow_html=True)
-        with col4:
-            st.markdown("""
-            <div class="metric-card">
-                <h4 style="color: #9B59B6;">平均歌单长度</h4>
-                <p style="font-size: 24px; font-weight: bold;">{:.1f}</p>
-            </div>
-            """.format(df['歌单长度'].mean()), unsafe_allow_html=True)
-        col5, col6, col7 = st.columns(3)
-        with col5:
-            st.markdown("""
-            <div class="metric-card">
-                <h4 style="color: #F39C12;">总评论数</h4>
-                <p style="font-size: 24px; font-weight: bold;">{:,}</p>
-            </div>
-            """.format(df['评论数'].sum()), unsafe_allow_html=True)
-        with col6:
-            st.markdown("""
-            <div class="metric-card">
-                <h4 style="color: #8E44AD;">总转发量</h4>
-                <p style="font-size: 24px; font-weight: bold;">{:,}</p>
-            </div>
-            """.format(df['转发量'].sum()), unsafe_allow_html=True)
-        with col7:
-            st.markdown("""
-            <div class="metric-card">
-                <h4 style="color: #16A085;">平均收藏播放比(%)</h4>
-                <p style="font-size: 24px; font-weight: bold;">{:.2f}</p>
-            </div>
-            """.format(df['收藏播放比'].mean()), unsafe_allow_html=True)
+        metrics = [
+            ("📊 总歌单数量", len(df), COLOR_PALETTE['primary']),
+            ("▶️ 总播放次数", f"{df['播放次数'].sum():,}", COLOR_PALETTE['secondary']),
+            ("❤️ 总收藏量", f"{df['收藏量'].sum():,}", COLOR_PALETTE['accent']),
+            ("🎵 平均歌单长度", f"{df['歌单长度'].mean():.1f}", COLOR_PALETTE['primary_dark']),
+            ("💬 总评论数", f"{df['评论数'].sum():,}", COLOR_PALETTE['warning']),
+            ("🔄 总转发量", f"{df['转发量'].sum():,}", COLOR_PALETTE['danger']),
+            ("📈 平均收藏播放比(%)", f"{df['收藏播放比'].mean():.2f}", COLOR_PALETTE['info'])
+        ]
     else:
-        col1, col2, col3, col4 = st.columns(4)
+        metrics = [
+            ("🎵 总歌曲数量", len(df), COLOR_PALETTE['primary']),
+            ("💬 总评论数", f"{df['评论总数'].sum():,}", COLOR_PALETTE['secondary']),
+            ("😊 平均积极评论占比(%)", f"{df['积极评论占比'].mean() * 100:.2f}", COLOR_PALETTE['accent']),
+            ("👍 积极情感歌曲数", len(df[df['情感倾向'] == '积极']), COLOR_PALETTE['primary_dark']),
+            ("👎 消极情感歌曲数", len(df[df['情感倾向'] == '消极']), COLOR_PALETTE['warning']),
+            ("😐 中立情感歌曲数", len(df[df['情感倾向'] == '中立']), COLOR_PALETTE['danger']),
+            ("📊 平均单首歌曲评论数", f"{df['评论总数'].mean():.1f}", COLOR_PALETTE['info'])
+        ]
+    
+    # 分批次显示卡片
+    for i in range(0, len(metrics), cols_per_row):
+        row_metrics = metrics[i:i+cols_per_row]
+        cols = st.columns(len(row_metrics))
+        
+        for col, (title, value, color) in zip(cols, row_metrics):
+            with col:
+                col.markdown(f"""
+                <div style="background-color: #ffffff; border-radius: 10px; padding: 20px; border-left: 5px solid {color}; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                    <div style="color: #666; font-size: 14px; margin-bottom: 8px;">{title}</div>
+                    <div style="color: {color}; font-size: 28px; font-weight: 600;">{value}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+# ---------------------- 新增：聚类分析模块 ----------------------
+def perform_clustering_analysis(df, data_type):
+    """执行聚类分析"""
+    st.markdown('<div class="sub-title">🧩 聚类分析结果</div>', unsafe_allow_html=True)
+    
+    if data_type == "风格歌单":
+        # 选择聚类特征
+        features = ['播放次数', '收藏量', '评论数', '歌单长度', '收藏播放比', '评论播放比']
+        cluster_df = df[features].copy()
+        
+        # 数据标准化
+        scaler = StandardScaler()
+        scaled_data = scaler.fit_transform(cluster_df)
+        
+        # 选择聚类数量
+        n_clusters = st.slider("选择聚类数量", min_value=2, max_value=10, value=4)
+        
+        # 执行K-means聚类
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+        df['聚类标签'] = kmeans.fit_predict(scaled_data)
+        
+        # 计算轮廓系数
+        silhouette_avg = silhouette_score(scaled_data, df['聚类标签'])
+        
+        # 显示聚类统计信息
+        col1, col2, col3 = st.columns(3)
         with col1:
-            st.markdown("""
-            <div class="metric-card">
-                <h4 style="color: #1DB954;">总歌曲数量</h4>
-                <p style="font-size: 24px; font-weight: bold;">{:,}</p>
+            st.markdown(f"""
+            <div class="model-metric">
+                <h4>聚类数量</h4>
+                <p>{n_clusters}</p>
             </div>
-            """.format(len(df)), unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
+        
         with col2:
-            st.markdown("""
-            <div class="metric-card">
-                <h4 style="color: #FF6B6B;">总评论数</h4>
-                <p style="font-size: 24px; font-weight: bold;">{:,}</p>
+            st.markdown(f"""
+            <div class="model-metric">
+                <h4>轮廓系数</h4>
+                <p>{silhouette_avg:.3f}</p>
             </div>
-            """.format(df['评论总数'].sum()), unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
+        
         with col3:
-            st.markdown("""
-            <div class="metric-card">
-                <h4 style="color: #4ECDC4;">平均积极评论占比(%)</h4>
-                <p style="font-size: 24px; font-weight: bold;">{:.2f}</p>
+            st.markdown(f"""
+            <div class="model-metric">
+                <h4>总数据量</h4>
+                <p>{len(df)}</p>
             </div>
-            """.format(df['积极评论占比'].mean() * 100), unsafe_allow_html=True)
-        with col4:
-            st.markdown("""
-            <div class="metric-card">
-                <h4 style="color: #9B59B6;">积极情感歌曲数</h4>
-                <p style="font-size: 24px; font-weight: bold;">{:,}</p>
+            """, unsafe_allow_html=True)
+        
+        # 聚类分布饼图
+        cluster_counts = df['聚类标签'].value_counts().sort_index()
+        fig = px.pie(
+            values=cluster_counts.values,
+            names=[f'聚类 {i}' for i in cluster_counts.index],
+            title='各聚类数据分布',
+            hole=0.3,
+            color_discrete_sequence=px.colors.qualitative.Set3
+        )
+        st.plotly_chart(fig, width='stretch')
+        
+        # PCA降维可视化
+        pca = PCA(n_components=2)
+        pca_result = pca.fit_transform(scaled_data)
+        
+        fig = px.scatter(
+            x=pca_result[:, 0],
+            y=pca_result[:, 1],
+            color=df['聚类标签'].astype(str),
+            title=f'PCA降维聚类可视化 (解释方差: {pca.explained_variance_ratio_.sum():.2%})',
+            labels={'x': 'PCA维度1', 'y': 'PCA维度2', 'color': '聚类标签'},
+            hover_data={
+                '名称': df['名称'],
+                '分类': df['分类'],
+                '播放次数': df['播放次数'],
+                '收藏量': df['收藏量']
+            },
+            color_discrete_sequence=px.colors.qualitative.Set1
+        )
+        st.plotly_chart(fig, width='stretch')
+        
+        # 各聚类特征分析
+        st.markdown("### 各聚类特征分析")
+        cluster_analysis = df.groupby('聚类标签')[features].mean().round(2)
+        
+        # 热力图展示各聚类特征
+        fig = px.imshow(
+            cluster_analysis.T,
+            title='各聚类特征热力图',
+            labels=dict(x="聚类标签", y="特征", color="平均值"),
+            x=[f'聚类 {i}' for i in cluster_analysis.index],
+            y=features,
+            color_continuous_scale='RdYlBu_r'
+        )
+        st.plotly_chart(fig, width='stretch')
+        
+        # 显示各聚类详细信息
+        for cluster_id in sorted(df['聚类标签'].unique()):
+            cluster_data = df[df['聚类标签'] == cluster_id]
+            with st.expander(f"聚类 {cluster_id} 详情 (共{len(cluster_data)}个歌单)", expanded=False):
+                # 显示聚类特征统计
+                st.dataframe(cluster_data[features].describe().round(2))
+                
+                # 显示聚类中的歌单示例
+                st.markdown("#### 歌单示例")
+                sample_data = cluster_data[['名称', '分类', '播放次数', '收藏量', '评论数']].head(10)
+                st.dataframe(sample_data)
+        
+    else:  # 榜单评论数据聚类
+        # 选择聚类特征
+        features = ['评论总数', '积极评论数', '消极评论数', '中立评论数', '积极评论占比', '消极评论占比']
+        cluster_df = df[features].copy()
+        
+        # 数据标准化
+        scaler = StandardScaler()
+        scaled_data = scaler.fit_transform(cluster_df)
+        
+        # 选择聚类数量
+        n_clusters = st.slider("选择聚类数量", min_value=2, max_value=8, value=3)
+        
+        # 执行K-means聚类
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+        df['聚类标签'] = kmeans.fit_predict(scaled_data)
+        
+        # 计算轮廓系数
+        silhouette_avg = silhouette_score(scaled_data, df['聚类标签'])
+        
+        # 显示聚类统计信息
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown(f"""
+            <div class="model-metric">
+                <h4>聚类数量</h4>
+                <p>{n_clusters}</p>
             </div>
-            """.format(len(df[df['情感倾向'] == '积极'])), unsafe_allow_html=True)
-        col5, col6, col7 = st.columns(3)
-        with col5:
-            st.markdown("""
-            <div class="metric-card">
-                <h4 style="color: #F39C12;">消极情感歌曲数</h4>
-                <p style="font-size: 24px; font-weight: bold;">{:,}</p>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown(f"""
+            <div class="model-metric">
+                <h4>轮廓系数</h4>
+                <p>{silhouette_avg:.3f}</p>
             </div>
-            """.format(len(df[df['情感倾向'] == '消极'])), unsafe_allow_html=True)
-        with col6:
-            st.markdown("""
-            <div class="metric-card">
-                <h4 style="color: #8E44AD;">中立情感歌曲数</h4>
-                <p style="font-size: 24px; font-weight: bold;">{:,}</p>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown(f"""
+            <div class="model-metric">
+                <h4>总数据量</h4>
+                <p>{len(df)}</p>
             </div>
-            """.format(len(df[df['情感倾向'] == '中立'])), unsafe_allow_html=True)
-        with col7:
-            st.markdown("""
-            <div class="metric-card">
-                <h4 style="color: #16A085;">平均单首歌曲评论数</h4>
-                <p style="font-size: 24px; font-weight: bold;">{:.1f}</p>
+            """, unsafe_allow_html=True)
+        
+        # 聚类与情感倾向交叉分析
+        cluster_sentiment = pd.crosstab(df['聚类标签'], df['情感倾向'])
+        fig = px.imshow(
+            cluster_sentiment,
+            title='聚类与情感倾向交叉分析',
+            labels=dict(x="情感倾向", y="聚类标签", color="歌曲数量"),
+            x=cluster_sentiment.columns,
+            y=[f'聚类 {i}' for i in cluster_sentiment.index],
+            color_continuous_scale='Blues'
+        )
+        st.plotly_chart(fig, width='stretch')
+        
+        # PCA降维可视化
+        pca = PCA(n_components=2)
+        pca_result = pca.fit_transform(scaled_data)
+        
+        fig = px.scatter(
+            x=pca_result[:, 0],
+            y=pca_result[:, 1],
+            color=df['聚类标签'].astype(str),
+            symbol=df['情感倾向'],
+            title=f'PCA降维聚类可视化 (解释方差: {pca.explained_variance_ratio_.sum():.2%})',
+            labels={'x': 'PCA维度1', 'y': 'PCA维度2', 'color': '聚类标签', 'symbol': '情感倾向'},
+            hover_data={
+                '歌曲名称': df['歌曲名称'],
+                '歌手': df['歌手'],
+                '评论总数': df['评论总数'],
+                '积极评论占比': df['积极评论占比']
+            },
+            color_discrete_sequence=px.colors.qualitative.Set1
+        )
+        st.plotly_chart(fig, width='stretch')
+        
+        # 各聚类特征分析
+        st.markdown("### 各聚类特征分析")
+        cluster_analysis = df.groupby('聚类标签')[features].mean().round(2)
+        
+        # 雷达图展示各聚类特征
+        for cluster_id in sorted(df['聚类标签'].unique()):
+            cluster_mean = cluster_analysis.loc[cluster_id]
+            fig = go.Figure()
+            fig.add_trace(go.Scatterpolar(
+                r=cluster_mean.values,
+                theta=features,
+                fill='toself',
+                name=f'聚类 {cluster_id}'
+            ))
+            fig.update_layout(
+                polar=dict(radialaxis=dict(visible=True)),
+                title=f'聚类 {cluster_id} 特征雷达图',
+                showlegend=False
+            )
+            st.plotly_chart(fig, width='stretch')
+
+# ---------------------- 新增：随机森林预测模块 ----------------------
+def perform_random_forest_prediction(df, data_type):
+    """执行随机森林预测分析"""
+    st.markdown('<div class="sub-title">🌳 随机森林预测分析</div>', unsafe_allow_html=True)
+    
+    if data_type == "风格歌单":
+        # 定义预测任务
+        prediction_task = st.selectbox(
+            "选择预测任务",
+            ["预测歌单受欢迎程度", "预测歌单分类", "预测收藏播放比"]
+        )
+        
+        if prediction_task == "预测歌单受欢迎程度":
+            # 定义受欢迎程度标签（基于播放次数分位数）
+            df['受欢迎程度'] = pd.qcut(
+                df['播放次数'], 
+                q=3, 
+                labels=['低', '中', '高']
+            )
+            
+            # 特征选择
+            features = ['收藏量', '评论数', '转发量', '歌单长度', '收藏播放比', '评论播放比']
+            X = df[features].fillna(0)
+            y = df['受欢迎程度']
+            
+            # 数据分割
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42, stratify=y
+            )
+            
+            # 训练随机森林分类器
+            rf = RandomForestClassifier(
+                n_estimators=100,
+                max_depth=10,
+                random_state=42,
+                n_jobs=-1
+            )
+            rf.fit(X_train, y_train)
+            
+            # 预测与评估
+            y_pred = rf.predict(X_test)
+            accuracy = accuracy_score(y_test, y_pred)
+            cv_scores = cross_val_score(rf, X, y, cv=5)
+            
+            # 显示模型评估指标
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.markdown(f"""
+                <div class="model-metric">
+                    <h4>测试集准确率</h4>
+                    <p>{accuracy:.3f}</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown(f"""
+                <div class="model-metric">
+                    <h4>5折交叉验证均值</h4>
+                    <p>{cv_scores.mean():.3f}</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col3:
+                st.markdown(f"""
+                <div class="model-metric">
+                    <h4>特征数量</h4>
+                    <p>{len(features)}</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # 特征重要性
+            feature_importance = pd.DataFrame({
+                '特征': features,
+                '重要性': rf.feature_importances_
+            }).sort_values('重要性', ascending=False)
+            
+            fig = px.bar(
+                feature_importance,
+                x='重要性',
+                y='特征',
+                orientation='h',
+                title='特征重要性排名',
+                color='重要性',
+                color_continuous_scale='viridis'
+            )
+            st.plotly_chart(fig, width='stretch')
+            
+            # 混淆矩阵
+            cm = confusion_matrix(y_test, y_pred)
+            fig = px.imshow(
+                cm,
+                title='混淆矩阵',
+                labels=dict(x="预测标签", y="真实标签", color="数量"),
+                x=['低', '中', '高'],
+                y=['低', '中', '高'],
+                color_continuous_scale='Blues'
+            )
+            st.plotly_chart(fig, width='stretch')
+            
+            # 分类报告
+            st.markdown("### 分类报告")
+            report = classification_report(y_test, y_pred, output_dict=True)
+            report_df = pd.DataFrame(report).transpose().round(3)
+            st.dataframe(report_df)
+            
+            # 预测示例
+            st.markdown("### 预测示例")
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                input_fav = st.number_input("收藏量", value=10000)
+            with col2:
+                input_comment = st.number_input("评论数", value=500)
+            with col3:
+                input_share = st.number_input("转发量", value=100)
+            with col4:
+                input_length = st.number_input("歌单长度", value=50)
+            
+            if st.button("预测受欢迎程度"):
+                input_data = pd.DataFrame({
+                    '收藏量': [input_fav],
+                    '评论数': [input_comment],
+                    '转发量': [input_share],
+                    '歌单长度': [input_length],
+                    '收藏播放比': [input_fav / 100000 * 100],  # 假设播放次数为10万
+                    '评论播放比': [input_comment / 100000 * 100]
+                })
+                
+                prediction = rf.predict(input_data)[0]
+                prediction_proba = rf.predict_proba(input_data)[0]
+                
+                st.success(f"预测结果：{prediction}受欢迎程度")
+                st.markdown("预测概率：")
+                prob_df = pd.DataFrame({
+                    '受欢迎程度': ['低', '中', '高'],
+                    '概率': prediction_proba
+                })
+                fig = px.bar(prob_df, x='受欢迎程度', y='概率', title='预测概率分布')
+                st.plotly_chart(fig, width='stretch')
+        
+        elif prediction_task == "预测歌单分类":
+            # 特征选择
+            features = ['播放次数', '收藏量', '评论数', '转发量', '歌单长度', '收藏播放比', '评论播放比']
+            X = df[features].fillna(0)
+            y = df['分类']
+            
+            # 数据分割
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42
+            )
+            
+            # 训练随机森林分类器
+            rf = RandomForestClassifier(
+                n_estimators=100,
+                max_depth=15,
+                random_state=42,
+                n_jobs=-1
+            )
+            rf.fit(X_train, y_train)
+            
+            # 预测与评估
+            y_pred = rf.predict(X_test)
+            accuracy = accuracy_score(y_test, y_pred)
+            
+            # 显示模型评估指标
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"""
+                <div class="model-metric">
+                    <h4>测试集准确率</h4>
+                    <p>{accuracy:.3f}</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown(f"""
+                <div class="model-metric">
+                    <h4>类别数量</h4>
+                    <p>{df['分类'].nunique()}</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # 特征重要性
+            feature_importance = pd.DataFrame({
+                '特征': features,
+                '重要性': rf.feature_importances_
+            }).sort_values('重要性', ascending=False)
+            
+            fig = px.bar(
+                feature_importance,
+                x='重要性',
+                y='特征',
+                orientation='h',
+                title='特征重要性排名',
+                color='重要性',
+                color_continuous_scale='plasma'
+            )
+            st.plotly_chart(fig, width='stretch')
+        
+        else:  # 预测收藏播放比（回归任务）
+            # 特征选择
+            features = ['播放次数', '评论数', '转发量', '歌单长度', '评论播放比']
+            X = df[features].fillna(0)
+            y = df['收藏播放比'].fillna(0)
+            
+            # 过滤极端值
+            y = y.clip(upper=y.quantile(0.95))
+            
+            # 数据分割
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42
+            )
+            
+            # 训练随机森林回归器
+            rf = RandomForestRegressor(
+                n_estimators=100,
+                max_depth=10,
+                random_state=42,
+                n_jobs=-1
+            )
+            rf.fit(X_train, y_train)
+            
+            # 预测与评估
+            y_pred = rf.predict(X_test)
+            mse = mean_squared_error(y_test, y_pred)
+            r2 = r2_score(y_test, y_pred)
+            
+            # 显示模型评估指标
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.markdown(f"""
+                <div class="model-metric">
+                    <h4>R²分数</h4>
+                    <p>{r2:.3f}</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown(f"""
+                <div class="model-metric">
+                    <h4>均方误差</h4>
+                    <p>{mse:.3f}</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col3:
+                st.markdown(f"""
+                <div class="model-metric">
+                    <h4>平均收藏播放比</h4>
+                    <p>{y.mean():.3f}%</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # 预测值vs实际值散点图
+            fig = px.scatter(
+                x=y_test,
+                y=y_pred,
+                title='预测值 vs 实际值',
+                labels={'x': '实际收藏播放比(%)', 'y': '预测收藏播放比(%)'},
+                trendline='ols',
+                opacity=0.6
+            )
+            fig.add_shape(
+                type='line',
+                x0=y_test.min(), y0=y_test.min(),
+                x1=y_test.max(), y1=y_test.max(),
+                line=dict(color='red', dash='dash')
+            )
+            st.plotly_chart(fig, width='stretch')
+            
+            # 特征重要性
+            feature_importance = pd.DataFrame({
+                '特征': features,
+                '重要性': rf.feature_importances_
+            }).sort_values('重要性', ascending=False)
+            
+            fig = px.bar(
+                feature_importance,
+                x='重要性',
+                y='特征',
+                orientation='h',
+                title='特征重要性排名',
+                color='重要性',
+                color_continuous_scale='magma'
+            )
+            st.plotly_chart(fig, width='stretch')
+    
+    else:  # 榜单评论数据预测
+        # 定义预测任务
+        prediction_task = st.selectbox(
+            "选择预测任务",
+            ["预测歌曲情感倾向", "预测评论总数", "预测积极评论占比"]
+        )
+        
+        if prediction_task == "预测歌曲情感倾向":
+            # 特征选择
+            features = ['评论总数', '积极评论数', '消极评论数', '中立评论数', '消极评论占比', '中立评论占比']
+            X = df[features].fillna(0)
+            y = df['情感倾向']
+            
+            # 数据分割
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42, stratify=y
+            )
+            
+            # 训练随机森林分类器
+            rf = RandomForestClassifier(
+                n_estimators=100,
+                max_depth=8,
+                random_state=42,
+                n_jobs=-1
+            )
+            rf.fit(X_train, y_train)
+            
+            # 预测与评估
+            y_pred = rf.predict(X_test)
+            accuracy = accuracy_score(y_test, y_pred)
+            
+            # 显示模型评估指标
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"""
+                <div class="model-metric">
+                    <h4>测试集准确率</h4>
+                    <p>{accuracy:.3f}</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown(f"""
+                <div class="model-metric">
+                    <h4>情感类别数</h4>
+                    <p>{df['情感倾向'].nunique()}</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # 特征重要性
+            feature_importance = pd.DataFrame({
+                '特征': features,
+                '重要性': rf.feature_importances_
+            }).sort_values('重要性', ascending=False)
+            
+            fig = px.bar(
+                feature_importance,
+                x='重要性',
+                y='特征',
+                orientation='h',
+                title='特征重要性排名',
+                color='重要性',
+                color_continuous_scale='cividis'
+            )
+            st.plotly_chart(fig, width='stretch')
+            
+            # 混淆矩阵
+            cm = confusion_matrix(y_test, y_pred)
+            fig = px.imshow(
+                cm,
+                title='混淆矩阵',
+                labels=dict(x="预测标签", y="真实标签", color="数量"),
+                x=df['情感倾向'].unique(),
+                y=df['情感倾向'].unique(),
+                color_continuous_scale='Greens'
+            )
+            st.plotly_chart(fig, width='stretch')
+        
+        elif prediction_task == "预测评论总数":
+            # 特征选择
+            features = ['积极评论数', '消极评论数', '中立评论数', '积极评论占比', '消极评论占比', '中立评论占比']
+            X = df[features].fillna(0)
+            y = df['评论总数'].fillna(0)
+            
+            # 数据分割
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42
+            )
+            
+            # 训练随机森林回归器
+            rf = RandomForestRegressor(
+                n_estimators=100,
+                max_depth=10,
+                random_state=42,
+                n_jobs=-1
+            )
+            rf.fit(X_train, y_train)
+            
+            # 预测与评估
+            y_pred = rf.predict(X_test)
+            mse = mean_squared_error(y_test, y_pred)
+            r2 = r2_score(y_test, y_pred)
+            
+            # 显示模型评估指标
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"""
+                <div class="model-metric">
+                    <h4>R²分数</h4>
+                    <p>{r2:.3f}</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown(f"""
+                <div class="model-metric">
+                    <h4>RMSE</h4>
+                    <p>{np.sqrt(mse):.0f}</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # 预测值vs实际值
+            fig = px.scatter(
+                x=y_test,
+                y=y_pred,
+                title='评论总数：预测值 vs 实际值',
+                labels={'x': '实际评论数', 'y': '预测评论数'},
+                trendline='ols',
+                opacity=0.6
+            )
+            fig.add_shape(
+                type='line',
+                x0=y_test.min(), y0=y_test.min(),
+                x1=y_test.max(), y1=y_test.max(),
+                line=dict(color='red', dash='dash')
+            )
+            st.plotly_chart(fig, width='stretch')
+        
+        else:  # 预测积极评论占比
+            # 特征选择
+            features = ['评论总数', '消极评论数', '中立评论数', '消极评论占比', '中立评论占比']
+            X = df[features].fillna(0)
+            y = df['积极评论占比'].fillna(0)
+            
+            # 数据分割
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42
+            )
+            
+            # 训练随机森林回归器
+            rf = RandomForestRegressor(
+                n_estimators=100,
+                max_depth=8,
+                random_state=42,
+                n_jobs=-1
+            )
+            rf.fit(X_train, y_train)
+            
+            # 预测与评估
+            y_pred = rf.predict(X_test)
+            r2 = r2_score(y_test, y_pred)
+            
+            # 显示模型评估指标
+            st.markdown(f"""
+            <div class="model-metric">
+                <h4>R²分数</h4>
+                <p>{r2:.3f}</p>
             </div>
-            """.format(df['评论总数'].mean()), unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
+            
+            # 特征重要性
+            feature_importance = pd.DataFrame({
+                '特征': features,
+                '重要性': rf.feature_importances_
+            }).sort_values('重要性', ascending=False)
+            
+            fig = px.bar(
+                feature_importance,
+                x='重要性',
+                y='特征',
+                orientation='h',
+                title='特征重要性排名',
+                color='重要性',
+                color_continuous_scale='inferno'
+            )
+            st.plotly_chart(fig, width='stretch')
 
 # ---------------------- 高级可视化模块（完整代码） ----------------------
 def plot_style_playlist_visualizations(df):
@@ -439,8 +1087,11 @@ def plot_style_playlist_visualizations(df):
     
     st.markdown('<div class="sub-title">🎯 风格歌单深度分析</div>', unsafe_allow_html=True)
     
-    # 创建标签页
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(['分类分析', '时间趋势', '相关性分析', '高级洞察', '智能推荐'])
+    # 创建标签页（新增机器学习标签页）
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+        '分类分析', '时间趋势', '相关性分析', '高级洞察', '智能推荐',
+        '聚类分析', '预测分析'  # 新增标签页
+    ])
     
     # Tab 1: 分类分析
     with tab1:
@@ -459,7 +1110,7 @@ def plot_style_playlist_visualizations(df):
                 template='plotly_white'
             )
             fig.update_layout(height=400)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
     
         with col2:
             # 各分类平均播放量
@@ -474,7 +1125,7 @@ def plot_style_playlist_visualizations(df):
                 template='plotly_white'
             )
             fig.update_layout(height=400)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         # 各分类综合指标雷达图
         st.markdown("### 各分类综合表现对比")
@@ -505,7 +1156,7 @@ def plot_style_playlist_visualizations(df):
             height=500,
             template='plotly_white'
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
     
     # Tab 2: 时间趋势
@@ -524,7 +1175,7 @@ def plot_style_playlist_visualizations(df):
             markers=True
         )
         fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
         
         # 近6个月各分类歌单增长情况（基于筛选后的数据）
         if not df.empty and not df['创建日期'].isna().all():
@@ -533,7 +1184,6 @@ def plot_style_playlist_visualizations(df):
             latest_month_dt = latest_month_period.to_timestamp()  # 转为datetime用于计算
             
             # 2. 计算筛选后数据的"近6个月"起始时间
-            from dateutil.relativedelta import relativedelta
             six_months_ago_dt = latest_month_dt - relativedelta(months=6)
             six_months_ago_period = six_months_ago_dt.to_period('M')  # 转回Period用于筛选
             
@@ -554,7 +1204,7 @@ def plot_style_playlist_visualizations(df):
                     template='plotly_white'
                 )
                 fig.update_layout(height=400)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
             else:
                 st.info("筛选后的数据中，近6个月内没有找到歌单数据")
         else:
@@ -579,7 +1229,7 @@ def plot_style_playlist_visualizations(df):
                 template='plotly_white'
             )
             fig.update_layout(height=400)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         with col2:
             # 播放量vs评论数散点图
@@ -596,7 +1246,7 @@ def plot_style_playlist_visualizations(df):
                 template='plotly_white'
             )
             fig.update_layout(height=400)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         # 数值特征相关性热力图
         numeric_features = ['播放次数', '收藏量', '转发量', '评论数', '歌单长度', '收藏播放比', '评论播放比']
@@ -612,7 +1262,7 @@ def plot_style_playlist_visualizations(df):
             template='plotly_white'
         )
         fig.update_layout(height=500)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     
     # Tab 4: 高级洞察
     with tab4:
@@ -639,7 +1289,7 @@ def plot_style_playlist_visualizations(df):
             category_orders={"名称": high_fav_ratio_df.sort_values('收藏播放比', ascending=False)['名称'].tolist()}
         )
         fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
         
         # 歌单长度分布
         st.markdown("### 歌单长度分布")
@@ -656,7 +1306,7 @@ def plot_style_playlist_visualizations(df):
             template='plotly_white'
         )
         fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
         
         # 标签云（使用Plotly的条形图模拟）
         st.markdown("### 热门标签分析")
@@ -675,13 +1325,13 @@ def plot_style_playlist_visualizations(df):
                     template='plotly_white'
                 )
                 fig.update_layout(height=400)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
             else:
                 st.info("没有找到有效的标签数据。")
         else:
             st.warning("数据中缺少 'tag1' 列，无法进行热门标签分析。")
     
-    # Tab 5: 智能推荐（新增）
+    # Tab 5: 智能推荐
     with tab5:
         st.markdown("### 🎯 歌单智能推荐系统")
         
@@ -795,10 +1445,14 @@ def plot_style_playlist_visualizations(df):
                             st.info("没有找到完全匹配的歌单，建议尝试调整搜索关键词或降低播放次数要求")
         else:
             st.warning("数据不足，无法创建推荐模型")
-
-from wordcloud import WordCloud
-import matplotlib.pyplot as plt
-from pathlib import Path
+    
+    # Tab 6: 聚类分析（新增）
+    with tab6:
+        perform_clustering_analysis(df, "风格歌单")
+    
+    # Tab 7: 预测分析（新增）
+    with tab7:
+        perform_random_forest_prediction(df, "风格歌单")
 
 def plot_rank_comment_visualizations(df):
     """4类榜单歌曲评论可视化"""
@@ -808,8 +1462,11 @@ def plot_rank_comment_visualizations(df):
     
     st.markdown('<div class="sub-title">🎯 榜单歌曲评论深度分析</div>', unsafe_allow_html=True)
     
-    # 创建标签页
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(['情感分析', '评论量分析', '高频词分析', '高级洞察', '智能推荐'])
+    # 创建标签页（新增机器学习标签页）
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+        '情感分析', '评论量分析', '高频词分析', '高级洞察', '智能推荐',
+        '聚类分析', '预测分析'  # 新增标签页
+    ])
     
     # Tab 1: 情感分析
     with tab1:
@@ -830,7 +1487,7 @@ def plot_rank_comment_visualizations(df):
                 template='plotly_white'
             )
             fig.update_layout(height=400)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         with col2:
             # 各榜单平均情感占比
@@ -850,7 +1507,7 @@ def plot_rank_comment_visualizations(df):
                 markers=True
             )
             fig.update_layout(height=400)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         # 情感得分分布箱线图
         st.markdown("### 各榜单情感得分分布")
@@ -864,7 +1521,7 @@ def plot_rank_comment_visualizations(df):
             template='plotly_white'
         )
         fig.update_layout(height=500)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     
     # Tab 2: 评论量分析
     with tab2:
@@ -882,7 +1539,7 @@ def plot_rank_comment_visualizations(df):
                 opacity=0.7
             )
             fig.update_layout(height=400)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         with col2:
             # 各榜单平均评论数
@@ -897,7 +1554,7 @@ def plot_rank_comment_visualizations(df):
                 template='plotly_white'
             )
             fig.update_layout(height=400)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         # 评论数与情感倾向关系
         st.markdown("### 评论数与情感倾向关系")
@@ -914,7 +1571,7 @@ def plot_rank_comment_visualizations(df):
             opacity=0.7
         )
         fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     
     # Tab 3: 高频词分析
     with tab3:
@@ -967,7 +1624,7 @@ def plot_rank_comment_visualizations(df):
             ax.axis('off')
             st.pyplot(fig)
             
-            # 原来的高频词条形图和榜单对比
+                        # 原来的高频词条形图和榜单对比
             keyword_counts = Counter(all_keywords).most_common(20)
             keywords_df = pd.DataFrame(keyword_counts, columns=['关键词', '出现次数'])
             
@@ -987,7 +1644,7 @@ def plot_rank_comment_visualizations(df):
                     template='plotly_white'
                 )
                 fig.update_layout(height=500)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
             
             with col2:
                 # 各榜单高频词对比（取前5个）
@@ -1009,7 +1666,7 @@ def plot_rank_comment_visualizations(df):
                 for rank, keywords in rank_keywords.items():
                     st.subheader(f"{rank}")
                     kw_df = pd.DataFrame(keywords, columns=['关键词', '出现次数'])
-                    st.dataframe(kw_df, use_container_width=True)
+                    st.dataframe(kw_df, width='stretch')
         else:
             st.info("没有找到有效的高频词数据")
   
@@ -1030,7 +1687,7 @@ def plot_rank_comment_visualizations(df):
             hover_data=['歌手', '评论总数', '高频字眼']
         )
         fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
             
         # Top 10 消极评论占比最高的歌曲
         st.markdown("### Top 10 消极评论占比最高的歌曲")
@@ -1048,7 +1705,7 @@ def plot_rank_comment_visualizations(df):
             color_discrete_map={'热歌榜': '#FF4136', '新歌榜': '#FF851B', '飙升榜': '#FFDC00', '原创榜': '#B10DC9'}
         )
         fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
             
         # 各榜单歌曲情感特征雷达图
         st.markdown("### 各榜单情感特征对比")
@@ -1077,9 +1734,9 @@ def plot_rank_comment_visualizations(df):
             height=500,
             template='plotly_white'
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     
-    # Tab 5: 智能推荐（新增）
+    # Tab 5: 智能推荐
     with tab5:
         st.markdown("### 🎯 歌曲智能推荐系统")
         
@@ -1196,6 +1853,14 @@ def plot_rank_comment_visualizations(df):
                             st.info("没有找到完全匹配的歌曲，建议尝试调整搜索关键词或降低筛选条件")
         else:
             st.warning("数据不足，无法创建推荐模型")
+    
+    # Tab 6: 聚类分析（新增）
+    with tab6:
+        perform_clustering_analysis(df, "榜单评论")
+    
+    # Tab 7: 预测分析（新增）
+    with tab7:
+        perform_random_forest_prediction(df, "榜单评论")
 
 # ---------------------- 主界面布局与逻辑 ----------------------
 def main():
@@ -1361,137 +2026,14 @@ def main():
         
         # 显示数据表格
         with st.expander("查看详细数据", expanded=False):
-            if selected_data_source == "13类风格歌单数据":
-                display_cols = ['名称', '分类', '创建日期', '播放次数', '收藏量', '评论数', '歌单长度', 'tag1']
-            else:
-                display_cols = ['歌曲名称', '歌手', '榜单类型', '评论总数', '积极评论数', '消极评论数', '中立评论数', '情感倾向', '高频字眼']
-            
-            # 确保所有要显示的列都存在于filtered_df中
-            display_cols = [col for col in display_cols if col in filtered_df.columns]
-            st.dataframe(
-                filtered_df[display_cols],
-                height=400,
-                use_container_width=True
-            )
+            st.dataframe(filtered_df, width='stretch')
         
-        # 榜单评论数据专属 - 查看单首歌曲详细评论
-        if selected_data_source == "4类榜单歌曲评论数据" and not filtered_df.empty:
-            st.markdown("---")
-            st.markdown('<div class="sub-title">💬 查看单首歌曲详细评论</div>', unsafe_allow_html=True)
-            
-            # 下拉选择要查看的歌曲
-            song_options = filtered_df.apply(
-                lambda x: f"{x['歌曲名称']} - {x['歌手']}（{x['榜单类型']}）", axis=1
-            ).tolist()
-            if song_options: # 确保列表不为空
-                selected_song_idx = st.selectbox("选择歌曲", range(len(song_options)), format_func=lambda i: song_options[i])
-                
-                # 获取选中歌曲的评论文件路径
-                selected_song = filtered_df.iloc[selected_song_idx]
-                comment_file_path = selected_song.get('评论文件路径', "") # 使用.get()避免KeyError
-                
-                if comment_file_path and comment_file_path != "":
-                    # 加载评论数据
-                    try:
-                        comments_df = pd.read_csv(comment_file_path, encoding='utf-8-sig')
-                        
-                        # 评论筛选功能
-                        st.markdown("#### 评论筛选")
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            comment_search = st.text_input("搜索评论内容")
-                        with col2:
-                            sentiment_filter = st.selectbox("筛选情感倾向", ["全部", "积极", "消极", "中立"])
-                        
-                        # 应用筛选
-                        filtered_comments = comments_df.copy()
-                        if comment_search:
-                            filtered_comments = filtered_comments[filtered_comments['评论内容'].str.contains(comment_search, na=False)]
-                        
-                        # 根据情感得分筛选
-                        if sentiment_filter != "全部" and '情感得分' in filtered_comments.columns:
-                            if sentiment_filter == "积极":
-                                filtered_comments = filtered_comments[filtered_comments['情感得分'] >= POSITIVE_THRESHOLD]
-                            elif sentiment_filter == "消极":
-                                filtered_comments = filtered_comments[filtered_comments['情感得分'] <= NEGATIVE_THRESHOLD]
-                            else: # 中立
-                                filtered_comments = filtered_comments[
-                                    (filtered_comments['情感得分'] > NEGATIVE_THRESHOLD) & 
-                                    (filtered_comments['情感得分'] < POSITIVE_THRESHOLD)
-                                ]
-                        
-                        # 显示评论统计
-                        st.markdown(f"**共找到 {len(filtered_comments)} 条评论（共 {len(comments_df)} 条）**")
-                        
-                        # 分页显示评论（每页20条）
-                        page_size = 20
-                        total_pages = (len(filtered_comments) + page_size - 1) // page_size
-                        page = st.number_input("页码", min_value=1, max_value=total_pages, value=1)
-                        start_idx = (page - 1) * page_size
-                        end_idx = start_idx + page_size
-                        page_comments = filtered_comments.iloc[start_idx:end_idx]
-                        
-                        # 显示评论表格
-                        comment_display_cols = ['用户名', '用户城市', '评论内容', '点赞数', '评论时间']
-                        if '情感得分' in page_comments.columns:
-                            comment_display_cols.append('情感得分')
-                        st.dataframe(
-                            page_comments[comment_display_cols],
-                            height=500,
-                            use_container_width=True
-                        )
-                        
-                        # 导出当前歌曲评论
-                        if st.button("导出当前歌曲评论为CSV"):
-                            export_path = DATA_DIR / f"{selected_song['歌曲名称']}_{selected_song['歌手']}_评论.csv"
-                            # 清理文件名中的非法字符
-                            export_path = Path(str(export_path).replace('/', '').replace('\\', '').replace('*', '').replace('?', '').replace('"', '').replace('<', '').replace('>', '').replace('|', ''))
-                            comments_df.to_csv(export_path, index=False, encoding='utf-8-sig')
-                            st.success(f"✅ 评论已导出至: {export_path}")
-                    
-                    except Exception as e:
-                        st.error(f"加载评论失败: {str(e)}")
-                else:
-                    st.warning("该歌曲没有对应的评论文件或评论文件不存在")
-        
+        # 可视化分析
         st.markdown("---")
-        
-        # 高级可视化
-        if not filtered_df.empty:
-            st.markdown("---")
-            if selected_data_source == "13类风格歌单数据":
-                plot_style_playlist_visualizations(filtered_df)
-            else:
-                plot_rank_comment_visualizations(filtered_df)
+        if selected_data_source == "13类风格歌单数据":
+            plot_style_playlist_visualizations(filtered_df)
         else:
-            st.warning("当前筛选条件下没有找到匹配的数据，无法生成可视化图表。")
-        
-        # 导出功能
-        st.markdown("---")
-        st.markdown('<div class="sub-title">💾 结果导出</div>', unsafe_allow_html=True)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("导出筛选后数据为CSV文件"):
-                if not filtered_df.empty:
-                    export_path = DATA_DIR / f"筛选后的{load_summary['data_type']}数据.csv"
-                    filtered_df.to_csv(export_path, index=False, encoding='utf-8-sig')
-                    st.success(f"✅ CSV文件已导出至: {export_path}")
-                else:
-                    st.warning("❌ 没有可导出的数据。")
-        
-        with col2:
-            if st.button("导出筛选后数据为Excel文件"):
-                if not filtered_df.empty:
-                    export_path = DATA_DIR / f"筛选后的{load_summary['data_type']}数据.xlsx"
-                    filtered_df.to_excel(export_path, index=False, engine='openpyxl')
-                    st.success(f"✅ Excel文件已导出至: {export_path}")
-                else:
-                    st.warning("❌ 没有可导出的数据。")
-    else:
-        st.error("无法显示数据分析和筛选功能，因为数据加载失败。")
+            plot_rank_comment_visualizations(filtered_df)
 
-# ---------------------- 运行入口 ----------------------
 if __name__ == "__main__":
     main()
