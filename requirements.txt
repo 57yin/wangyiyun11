@@ -1,11 +1,18 @@
-
-streamlit>=1.28.0,<2.0.0
-pandas>=2.0.0,<3.0.0
-plotly>=5.15.0,<6.0.0
+# 基础核心依赖
+streamlit>=1.28.0
+pandas>=2.0.0
+plotly>=5.17.0
+numpy>=1.24.0
 openpyxl>=3.1.0
-numpy>=1.24.0,<2.0.0
+
+# 文本/机器学习相关
 jieba>=0.42.1
-scikit-learn>=1.2.0,<2.0.0
-wordcloud>=1.9.3
-matplotlib>=3.7.0,<4.0.0
-python-dateutil>=2.8.2  # 代码中用了relativedelta
+scikit-learn>=1.3.0
+
+# 可视化相关
+wordcloud>=1.9.2
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# 其他辅助
+python-dateutil>=2.8.2

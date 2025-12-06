@@ -33,7 +33,8 @@ warnings.filterwarnings('ignore')
 def install_deps():
     required_packages = [
         'streamlit>=1.28.0', 'pandas', 'plotly', 'openpyxl', 'numpy', 
-        'jieba', 'scikit-learn', 'wordcloud', 'matplotlib', 'seaborn'
+        'jieba', 'scikit-learn', 'wordcloud', 'matplotlib', 'seaborn',
+        'statsmodels'
     ]
     try:
         import pkg_resources
@@ -614,7 +615,7 @@ def perform_random_forest_prediction(df, data_type):
         # 定义预测任务
         prediction_task = st.selectbox(
             "选择预测任务",
-            ["预测歌单受欢迎程度", "预测歌单分类", "预测收藏播放比"]
+            ["预测歌单受欢迎程度", "预测歌单分类"]
         )
         
         if prediction_task == "预测歌单受欢迎程度":
@@ -802,100 +803,12 @@ def perform_random_forest_prediction(df, data_type):
                 color_continuous_scale='plasma'
             )
             st.plotly_chart(fig, width='stretch')
-        
-        else:  # 预测收藏播放比（回归任务）
-            # 特征选择
-            features = ['播放次数', '评论数', '转发量', '歌单长度', '评论播放比']
-            X = df[features].fillna(0)
-            y = df['收藏播放比'].fillna(0)
-            
-            # 过滤极端值
-            y = y.clip(upper=y.quantile(0.95))
-            
-            # 数据分割
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.2, random_state=42
-            )
-            
-            # 训练随机森林回归器
-            rf = RandomForestRegressor(
-                n_estimators=100,
-                max_depth=10,
-                random_state=42,
-                n_jobs=-1
-            )
-            rf.fit(X_train, y_train)
-            
-            # 预测与评估
-            y_pred = rf.predict(X_test)
-            mse = mean_squared_error(y_test, y_pred)
-            r2 = r2_score(y_test, y_pred)
-            
-            # 显示模型评估指标
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.markdown(f"""
-                <div class="model-metric">
-                    <h4>R²分数</h4>
-                    <p>{r2:.3f}</p>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col2:
-                st.markdown(f"""
-                <div class="model-metric">
-                    <h4>均方误差</h4>
-                    <p>{mse:.3f}</p>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col3:
-                st.markdown(f"""
-                <div class="model-metric">
-                    <h4>平均收藏播放比</h4>
-                    <p>{y.mean():.3f}%</p>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            # 预测值vs实际值散点图
-            fig = px.scatter(
-                x=y_test,
-                y=y_pred,
-                title='预测值 vs 实际值',
-                labels={'x': '实际收藏播放比(%)', 'y': '预测收藏播放比(%)'},
-                trendline='ols',
-                opacity=0.6
-            )
-            fig.add_shape(
-                type='line',
-                x0=y_test.min(), y0=y_test.min(),
-                x1=y_test.max(), y1=y_test.max(),
-                line=dict(color='red', dash='dash')
-            )
-            st.plotly_chart(fig, width='stretch')
-            
-            # 特征重要性
-            feature_importance = pd.DataFrame({
-                '特征': features,
-                '重要性': rf.feature_importances_
-            }).sort_values('重要性', ascending=False)
-            
-            fig = px.bar(
-                feature_importance,
-                x='重要性',
-                y='特征',
-                orientation='h',
-                title='特征重要性排名',
-                color='重要性',
-                color_continuous_scale='magma'
-            )
-            st.plotly_chart(fig, width='stretch')
     
     else:  # 榜单评论数据预测
         # 定义预测任务
         prediction_task = st.selectbox(
             "选择预测任务",
-            ["预测歌曲情感倾向", "预测评论总数", "预测积极评论占比"]
+            ["预测歌曲情感倾向", "预测积极评论占比"]
         )
         
         if prediction_task == "预测歌曲情感倾向":
@@ -966,66 +879,6 @@ def perform_random_forest_prediction(df, data_type):
                 x=df['情感倾向'].unique(),
                 y=df['情感倾向'].unique(),
                 color_continuous_scale='Greens'
-            )
-            st.plotly_chart(fig, width='stretch')
-        
-        elif prediction_task == "预测评论总数":
-            # 特征选择
-            features = ['积极评论数', '消极评论数', '中立评论数', '积极评论占比', '消极评论占比', '中立评论占比']
-            X = df[features].fillna(0)
-            y = df['评论总数'].fillna(0)
-            
-            # 数据分割
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.2, random_state=42
-            )
-            
-            # 训练随机森林回归器
-            rf = RandomForestRegressor(
-                n_estimators=100,
-                max_depth=10,
-                random_state=42,
-                n_jobs=-1
-            )
-            rf.fit(X_train, y_train)
-            
-            # 预测与评估
-            y_pred = rf.predict(X_test)
-            mse = mean_squared_error(y_test, y_pred)
-            r2 = r2_score(y_test, y_pred)
-            
-            # 显示模型评估指标
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown(f"""
-                <div class="model-metric">
-                    <h4>R²分数</h4>
-                    <p>{r2:.3f}</p>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col2:
-                st.markdown(f"""
-                <div class="model-metric">
-                    <h4>RMSE</h4>
-                    <p>{np.sqrt(mse):.0f}</p>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            # 预测值vs实际值
-            fig = px.scatter(
-                x=y_test,
-                y=y_pred,
-                title='评论总数：预测值 vs 实际值',
-                labels={'x': '实际评论数', 'y': '预测评论数'},
-                trendline='ols',
-                opacity=0.6
-            )
-            fig.add_shape(
-                type='line',
-                x0=y_test.min(), y0=y_test.min(),
-                x1=y_test.max(), y1=y_test.max(),
-                line=dict(color='red', dash='dash')
             )
             st.plotly_chart(fig, width='stretch')
         
