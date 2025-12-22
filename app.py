@@ -15,6 +15,8 @@ import re
 import subprocess
 import sys
 from dateutil.relativedelta import relativedelta
+import jieba
+jieba.initialize()  # 初始化分词器
 
 # 机器学习相关库
 from sklearn.cluster import KMeans
